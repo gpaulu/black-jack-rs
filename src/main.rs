@@ -40,6 +40,9 @@ struct Player {
     name: String,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+struct Hand(Vec<Entity>);
+
 type Card = (Suit, Value, Position);
 
 fn gen_deck_of_cards() -> Vec<Card> {
@@ -94,13 +97,20 @@ fn shuffle_deck(#[resource] deck: &mut Deck, #[resource] rng: &mut ChaCha8Rng) {
 
 #[system(for_each)]
 #[write_component(Position)]
-fn deal(player: &Player, entity: &Entity, world: &mut SubWorld, #[resource] deck: &mut Deck) {
+fn deal(
+    player: &Player,
+    hand: &mut Hand,
+    entity: &Entity,
+    world: &mut SubWorld,
+    #[resource] deck: &mut Deck,
+) {
     println!("Hello, deal");
     let mut deal1 = || {
         if deck.0.is_empty() {
             todo!();
         }
         let card = deck.0.pop().expect("Deck is not empty");
+        hand.0.push(card);
         let mut card = world.entry_mut(card).expect("Card exists");
         println!("card has {:?}", card.archetype().layout().component_types());
         let position = card
@@ -114,21 +124,43 @@ fn deal(player: &Player, entity: &Entity, world: &mut SubWorld, #[resource] deck
     deal1();
 }
 
+#[system(for_each)]
+#[read_component(Suit)]
+#[read_component(Value)]
+fn display_cards(player: &Player, hand: &Hand, world: &SubWorld) {
+    println!("player {}", player.name);
+    for entity in &hand.0 {
+        let card = world.entry_ref(*entity).expect("Card exists");
+        print!(
+            "{:?} of {:?}, ", //TODO: impl Display
+            card.get_component::<Value>().expect("Card has Value"),
+            card.get_component::<Suit>().expect("Card has Suit")
+        );
+    }
+    println!();
+}
+
 fn main() {
     let mut rng = thread_rng();
     let mut world = World::default();
     let mut cards: Vec<_> = world.extend(gen_deck_of_cards()).iter().collect();
     cards.shuffle(&mut rng);
-    let dealer = world.push((Player {
-        score: 0,
-        id: 0,
-        name: String::from("Dealer"),
-    },));
-    let player = world.push((Player {
-        score: 0,
-        id: 1,
-        name: String::from("Player"),
-    },));
+    let dealer = world.push((
+        Player {
+            score: 0,
+            id: 0,
+            name: String::from("Dealer"),
+        },
+        Hand(Vec::new()),
+    ));
+    let player = world.push((
+        Player {
+            score: 0,
+            id: 1,
+            name: String::from("Player"),
+        },
+        Hand(Vec::new()),
+    ));
 
     let mut query = <&Player>::query();
 
@@ -157,10 +189,15 @@ fn main() {
     resources.insert(rand_chacha::ChaCha8Rng::seed_from_u64(10));
     schedule.execute(&mut world, &mut resources);
 
-    let mut query = <(&Suit, &Value, &Position)>::query();
+    let mut gameplay_loop = Schedule::builder()
+        .add_system(display_cards_system())
+        .build();
+    gameplay_loop.execute(&mut world, &mut resources);
 
-    // you can then iterate through the components found in the world
-    for position in query.iter(&world) {
-        println!("{:?}", position);
-    }
+    // let mut query = <(&Suit, &Value, &Position)>::query();
+
+    // // you can then iterate through the components found in the world
+    // for position in query.iter(&world) {
+    //     println!("{:?}", position);
+    // }
 }
