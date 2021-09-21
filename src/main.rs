@@ -26,12 +26,12 @@ enum Value {
     Ace,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-enum Position {
-    Deck,
-    Discard,
-    Hand(u8),
-}
+// #[derive(Clone, Copy, Debug, PartialEq)]
+// enum Position {
+//     Deck,
+//     Discard,
+//     Hand(u8),
+// }
 
 #[derive(Clone, Debug, PartialEq)]
 struct Player {
@@ -43,18 +43,18 @@ struct Player {
 #[derive(Clone, Debug, PartialEq)]
 struct Hand(Vec<Entity>);
 
-type Card = (Suit, Value, Position);
+type Card = (Suit, Value /*, Position*/);
 
 fn gen_deck_of_cards() -> Vec<Card> {
     let mut deck = Vec::with_capacity(52);
     fn insert_cards_of_suit(deck: &mut Vec<Card>, suit: Suit) {
-        deck.push((suit, Value::Ace, Position::Discard));
+        deck.push((suit, Value::Ace));
         for i in 2..=10 {
-            deck.push((suit, Value::Num(i), Position::Discard));
+            deck.push((suit, Value::Num(i)));
         }
-        deck.push((suit, Value::Jack, Position::Discard));
-        deck.push((suit, Value::Queen, Position::Discard));
-        deck.push((suit, Value::King, Position::Discard));
+        deck.push((suit, Value::Jack));
+        deck.push((suit, Value::Queen));
+        deck.push((suit, Value::King));
     }
     insert_cards_of_suit(&mut deck, Suit::Heart);
     insert_cards_of_suit(&mut deck, Suit::Diamond);
@@ -85,8 +85,9 @@ fn gen_deck_of_cards() -> Vec<Card> {
 struct Deck(Vec<Entity>);
 
 #[system(for_each)]
-fn put_in_deck(pos: &mut Position, entity: &Entity, #[resource] deck: &mut Deck) {
-    *pos = Position::Deck;
+#[filter(component::<Suit>())]
+fn put_in_deck(entity: &Entity, #[resource] deck: &mut Deck) {
+    // *pos = Position::Deck;
     deck.0.push(*entity);
 }
 
@@ -95,33 +96,27 @@ fn shuffle_deck(#[resource] deck: &mut Deck, #[resource] rng: &mut ChaCha8Rng) {
     deck.0.shuffle(rng);
 }
 
+fn deal1(player: &Player, hand: &mut Hand, deck: &mut Deck) {
+    if deck.0.is_empty() {
+        todo!();
+    }
+    let card = deck.0.pop().expect("Deck is not empty");
+    hand.0.push(card);
+    // let mut card = world.entry_mut(card).expect("Card exists");
+    // println!("card has {:?}", card.archetype().layout().component_types());
+    // let position = card
+    //     .get_component_mut::<Position>()
+    //     .expect("Card has Position");
+    // *position = Position::Hand(player.id);
+    // let position = card.get_component::<Position>().expect("Card has Position");
+    // println!("Position is {:?}", position);
+}
+
 #[system(for_each)]
-#[write_component(Position)]
-fn deal(
-    player: &Player,
-    hand: &mut Hand,
-    entity: &Entity,
-    world: &mut SubWorld,
-    #[resource] deck: &mut Deck,
-) {
-    println!("Hello, deal");
-    let mut deal1 = || {
-        if deck.0.is_empty() {
-            todo!();
-        }
-        let card = deck.0.pop().expect("Deck is not empty");
-        hand.0.push(card);
-        let mut card = world.entry_mut(card).expect("Card exists");
-        println!("card has {:?}", card.archetype().layout().component_types());
-        let position = card
-            .get_component_mut::<Position>()
-            .expect("Card has Position");
-        *position = Position::Hand(player.id);
-        // let position = card.get_component::<Position>().expect("Card has Position");
-        // println!("Position is {:?}", position);
-    };
-    deal1();
-    deal1();
+// #[write_component(Position)]
+fn deal(player: &Player, hand: &mut Hand, #[resource] deck: &mut Deck) {
+    deal1(player, hand, deck);
+    deal1(player, hand, deck);
 }
 
 #[system(for_each)]
@@ -172,7 +167,7 @@ fn main() {
     }
 
     // you define a query be declaring what components you want to find, and how you will access them
-    let mut query = <(&Suit, &Value, &Position)>::query();
+    let mut query = <(&Suit, &Value)>::query();
 
     // you can then iterate through the components found in the world
     for position in query.iter(&world) {
