@@ -3,15 +3,13 @@
 
 use std::collections::VecDeque;
 use std::io::stdin;
-use std::sync::mpsc::{channel, Receiver};
 use std::sync::{Arc, Mutex};
 
 use legion::world::SubWorld;
 use legion::*;
-use rand::prelude::ThreadRng;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
-use rand::{Rng, SeedableRng};
+use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -167,6 +165,7 @@ enum Decision {
     Hold,
 }
 
+#[allow(clippy::needless_return)] // return in match arm is an early return and makes sense to keep
 fn player_decision() -> Decision {
     println!("Choose: 1) Hit, 2) Hold");
     let mut buffer = String::new();
