@@ -1,6 +1,11 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
+use std::collections::VecDeque;
+use std::io::stdin;
+use std::sync::mpsc::{channel, Receiver};
+use std::sync::{Arc, Mutex};
+
 use legion::world::SubWorld;
 use legion::*;
 use rand::prelude::ThreadRng;
@@ -135,6 +140,52 @@ fn display_cards(player: &Player, hand: &Hand, world: &SubWorld) {
     println!();
 }
 
+#[system(for_each)]
+fn action(
+    player: &Player,
+    hand: &mut Hand,
+    #[resource] deck: &mut Deck,
+    #[resource] decision_queue: &Arc<Mutex<VecDeque<Decision>>>,
+) {
+    if player.name == "Dealer" {
+        return;
+    }
+    let mut decision_queue = decision_queue.lock().unwrap();
+    if decision_queue.is_empty() {
+        return;
+    }
+    let decision = decision_queue.pop_front().unwrap();
+    match decision {
+        Decision::Hit => deal1(player, hand, deck),
+        Decision::Hold => unreachable!(),
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Decision {
+    Hit,
+    Hold,
+}
+
+fn player_decision() -> Decision {
+    println!("Choose: 1) Hit, 2) Hold");
+    let mut buffer = String::new();
+    stdin().read_line(&mut buffer).expect("Read input");
+    let res = match buffer.trim_end() {
+        "" => return player_decision(),
+        response => response,
+    };
+    let num = match res.parse::<u8>() {
+        Err(_) => return player_decision(),
+        Ok(num) => num,
+    };
+    match num {
+        1 => Decision::Hit,
+        2 => Decision::Hold,
+        _ => return player_decision(),
+    }
+}
+
 fn main() {
     let mut rng = thread_rng();
     let mut world = World::default();
@@ -179,16 +230,30 @@ fn main() {
         .add_system(shuffle_deck_system())
         .add_system(deal_system())
         .build();
+
+    let mut gameplay_loop = Schedule::builder()
+        .add_system(action_system())
+        .add_system(display_cards_system())
+        .build();
+
     let mut resources = Resources::default();
     resources.insert(Deck::default());
     resources.insert(rand_chacha::ChaCha8Rng::seed_from_u64(10));
+    let decision_queue = Arc::new(Mutex::new(VecDeque::new()));
+    resources.insert(decision_queue.clone());
+
     schedule.execute(&mut world, &mut resources);
-
-    let mut gameplay_loop = Schedule::builder()
-        .add_system(display_cards_system())
-        .build();
-    gameplay_loop.execute(&mut world, &mut resources);
-
+    loop {
+        gameplay_loop.execute(&mut world, &mut resources);
+        let decision = player_decision();
+        if let Decision::Hold = decision {
+            break;
+        }
+        decision_queue
+            .lock()
+            .expect("lock failed")
+            .push_back(decision);
+    }
     // let mut query = <(&Suit, &Value, &Position)>::query();
 
     // // you can then iterate through the components found in the world
