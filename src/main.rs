@@ -135,7 +135,7 @@ fn display_cards(player: &Player, hand: &Hand, world: &SubWorld) {
             card.get_component::<Suit>().expect("Card has Suit")
         );
     }
-    println!();
+    println!("Score: {}", player.score);
 }
 
 #[system(for_each)]
@@ -157,6 +157,32 @@ fn action(
         Decision::Hit => deal1(player, hand, deck),
         Decision::Hold => unreachable!(),
     }
+}
+
+#[system(for_each)]
+#[read_component(Suit)]
+#[read_component(Value)]
+fn score(player: &mut Player, hand: &Hand, world: &SubWorld) {
+    // let aces = hand.iter().filter(|entity| if let )
+    let card_values = hand.0.iter().map(|entity| {
+        let card = world.entry_ref(*entity).expect("Card exists");
+        card.into_component::<Value>().expect("Card has Value")
+    });
+    let aces = card_values
+        .clone()
+        .filter(|card| matches!(card, Value::Ace));
+    let score = card_values
+        .clone()
+        .filter_map(|card| match card {
+            Value::Num(n) => Some(*n),
+            Value::Jack => Some(10),
+            Value::Queen => Some(10),
+            Value::King => Some(10),
+            Value::Ace => None,
+        })
+        .sum();
+    // Todo: apply aces
+    player.score = score;
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -232,6 +258,7 @@ fn main() {
 
     let mut gameplay_loop = Schedule::builder()
         .add_system(action_system())
+        .add_system(score_system())
         .add_system(display_cards_system())
         .build();
 
