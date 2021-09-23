@@ -38,7 +38,7 @@ enum Value {
 
 #[derive(Clone, Debug, PartialEq)]
 struct Player {
-    score: u8,
+    score: u32,
     id: u8,
     name: String,
 }
@@ -170,19 +170,33 @@ fn score(player: &mut Player, hand: &Hand, world: &SubWorld) {
     });
     let aces = card_values
         .clone()
-        .filter(|card| matches!(card, Value::Ace));
-    let score = card_values
+        .filter(|card| matches!(card, Value::Ace))
+        .count();
+    let score: u32 = card_values
         .clone()
         .filter_map(|card| match card {
-            Value::Num(n) => Some(*n),
+            Value::Num(n) => Some(*n as u32),
             Value::Jack => Some(10),
             Value::Queen => Some(10),
             Value::King => Some(10),
             Value::Ace => None,
         })
         .sum();
-    // Todo: apply aces
-    player.score = score;
+    let mut possible_scores = vec![score];
+    for _ in 0..aces {
+        let mut new_scores = Vec::new();
+        for i in &possible_scores {
+            new_scores.push(i + 1);
+            new_scores.push(i + 11);
+        }
+        possible_scores = new_scores;
+    }
+    let score = possible_scores
+        .iter()
+        .filter(|scr| **scr <= 21)
+        .max()
+        .unwrap_or_else(|| possible_scores.iter().min().expect("A score must exist"));
+    player.score = *score;
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
