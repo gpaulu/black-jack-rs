@@ -42,6 +42,12 @@ enum Face {
 //     Hand(u8),
 // }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum PlayerType {
+    Player,
+    Dealer,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 struct Player {
     score: u32,
@@ -128,8 +134,14 @@ fn deal1(hand: &mut Hand, deck: &mut Deck) {
 
 #[system(for_each)]
 #[write_component(Face)]
-fn deal(player: &Player, hand: &mut Hand, world: &mut SubWorld, #[resource] deck: &mut Deck) {
-    if player.name == "Dealer" {
+fn deal(
+    player: &Player,
+    player_type: &PlayerType,
+    hand: &mut Hand,
+    world: &mut SubWorld,
+    #[resource] deck: &mut Deck,
+) {
+    if *player_type == PlayerType::Dealer {
         let card_entity = pop_deck(deck);
         let mut card = world.entry_mut(card_entity).expect("Card exists");
         let face = card.get_component_mut::<Face>().expect("Card has Face");
@@ -175,11 +187,12 @@ fn display_cards(player: &Player, hand: &Hand, world: &SubWorld) {
 #[system(for_each)]
 fn action(
     player: &Player,
+    player_type: &PlayerType,
     hand: &mut Hand,
     #[resource] deck: &mut Deck,
     #[resource] decision_queue: &Arc<Mutex<VecDeque<Decision>>>,
 ) {
-    if player.name == "Dealer" {
+    if *player_type == PlayerType::Dealer {
         return;
     }
     let mut decision_queue = decision_queue.lock().unwrap();
@@ -270,6 +283,7 @@ fn main() {
             id: 0,
             name: String::from("Dealer"),
         },
+        PlayerType::Dealer,
         Hand(Vec::new()),
     ));
     let player = world.push((
@@ -278,6 +292,7 @@ fn main() {
             id: 1,
             name: String::from("Player"),
         },
+        PlayerType::Player,
         Hand(Vec::new()),
     ));
 
