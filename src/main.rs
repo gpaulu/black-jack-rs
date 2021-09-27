@@ -29,6 +29,12 @@ enum Value {
     Ace,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Face {
+    Up,
+    Down,
+}
+
 // #[derive(Clone, Copy, Debug, PartialEq)]
 // enum Position {
 //     Deck,
@@ -46,18 +52,19 @@ struct Player {
 #[derive(Clone, Debug, PartialEq)]
 struct Hand(Vec<Entity>);
 
-type Card = (Suit, Value /*, Position*/);
+type Card = (Suit, Value, Face);
 
 fn gen_deck_of_cards() -> Vec<Card> {
     let mut deck = Vec::with_capacity(52);
     fn insert_cards_of_suit(deck: &mut Vec<Card>, suit: Suit) {
-        deck.push((suit, Value::Ace));
+        let make_card = |suit: Suit, value: Value| (suit, value, Face::Up);
+        deck.push(make_card(suit, Value::Ace));
         for i in 2..=10 {
-            deck.push((suit, Value::Num(i)));
+            deck.push(make_card(suit, Value::Num(i)));
         }
-        deck.push((suit, Value::Jack));
-        deck.push((suit, Value::Queen));
-        deck.push((suit, Value::King));
+        deck.push(make_card(suit, Value::Jack));
+        deck.push(make_card(suit, Value::Queen));
+        deck.push(make_card(suit, Value::King));
     }
     insert_cards_of_suit(&mut deck, Suit::Heart);
     insert_cards_of_suit(&mut deck, Suit::Diamond);
@@ -99,11 +106,15 @@ fn shuffle_deck(#[resource] deck: &mut Deck, #[resource] rng: &mut ChaCha8Rng) {
     deck.0.shuffle(rng);
 }
 
-fn deal1(player: &Player, hand: &mut Hand, deck: &mut Deck) {
+fn pop_deck(deck: &mut Deck) -> Entity {
     if deck.0.is_empty() {
         todo!();
     }
-    let card = deck.0.pop().expect("Deck is not empty");
+    deck.0.pop().expect("Deck is not empty")
+}
+
+fn deal1(hand: &mut Hand, deck: &mut Deck) {
+    let card = pop_deck(deck);
     hand.0.push(card);
     // let mut card = world.entry_mut(card).expect("Card exists");
     // println!("card has {:?}", card.archetype().layout().component_types());
@@ -116,26 +127,49 @@ fn deal1(player: &Player, hand: &mut Hand, deck: &mut Deck) {
 }
 
 #[system(for_each)]
-// #[write_component(Position)]
-fn deal(player: &Player, hand: &mut Hand, #[resource] deck: &mut Deck) {
-    deal1(player, hand, deck);
-    deal1(player, hand, deck);
+#[write_component(Face)]
+fn deal(player: &Player, hand: &mut Hand, world: &mut SubWorld, #[resource] deck: &mut Deck) {
+    if player.name == "Dealer" {
+        let card_entity = pop_deck(deck);
+        let mut card = world.entry_mut(card_entity).expect("Card exists");
+        let face = card.get_component_mut::<Face>().expect("Card has Face");
+        *face = Face::Down;
+        hand.0.push(card_entity);
+    } else {
+        deal1(hand, deck);
+    }
+    deal1(hand, deck);
 }
 
 #[system(for_each)]
 #[read_component(Suit)]
 #[read_component(Value)]
+#[read_component(Face)]
 fn display_cards(player: &Player, hand: &Hand, world: &SubWorld) {
     println!("player {}", player.name);
+    let mut has_any_face_down = false;
     for entity in &hand.0 {
         let card = world.entry_ref(*entity).expect("Card exists");
-        print!(
-            "{:?} of {:?}, ", //TODO: impl Display
-            card.get_component::<Value>().expect("Card has Value"),
-            card.get_component::<Suit>().expect("Card has Suit")
-        );
+        let face = card.get_component::<Face>().expect("Card has Face");
+        match face {
+            Face::Up => {
+                print!(
+                    "{:?} of {:?}, ", //TODO: impl Display
+                    card.get_component::<Value>().expect("Card has Value"),
+                    card.get_component::<Suit>().expect("Card has Suit")
+                );
+            }
+            Face::Down => {
+                has_any_face_down = true;
+                print!("???, ")
+            }
+        }
     }
-    println!("Score: {}", player.score);
+    if has_any_face_down {
+        println!("Score: ???");
+    } else {
+        println!("Score: {}", player.score);
+    }
 }
 
 #[system(for_each)]
@@ -154,7 +188,7 @@ fn action(
     }
     let decision = decision_queue.pop_front().unwrap();
     match decision {
-        Decision::Hit => deal1(player, hand, deck),
+        Decision::Hit => deal1(hand, deck),
         Decision::Hold => unreachable!(),
     }
 }
@@ -294,6 +328,7 @@ fn main() {
             .expect("lock failed")
             .push_back(decision);
     }
+
     // let mut query = <(&Suit, &Value, &Position)>::query();
 
     // // you can then iterate through the components found in the world
