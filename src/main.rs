@@ -5,6 +5,7 @@ use std::collections::VecDeque;
 use std::io::stdin;
 use std::sync::{Arc, Mutex};
 
+use legion::systems::CommandBuffer;
 use legion::world::SubWorld;
 use legion::*;
 use rand::seq::SliceRandom;
@@ -150,25 +151,36 @@ fn display_cards(player: &Player, hand: &Hand, world: &SubWorld) {
     }
 }
 
+type DecisionQueue = Arc<Mutex<VecDeque<Decision>>>;
+
 #[system(for_each)]
 fn action(
     player: &Player,
     player_type: &PlayerType,
     hand: &mut Hand,
+    entity: &Entity,
+    cmd: &mut CommandBuffer,
     #[resource] deck: &mut Deck,
-    #[resource] decision_queue: &Arc<Mutex<VecDeque<Decision>>>,
+    #[resource] decision_queue: &DecisionQueue,
 ) {
-    if *player_type == PlayerType::Dealer {
-        return;
-    }
     let mut decision_queue = decision_queue.lock().unwrap();
     if decision_queue.is_empty() {
         return;
     }
-    let decision = decision_queue.pop_front().unwrap();
+    let decision = decision_queue.front().unwrap();
+
     match decision {
-        Decision::Hit => deal1(hand, deck),
-        Decision::Hold => unreachable!(),
+        Decision::Hit => {
+            if *player_type == PlayerType::Player {
+                decision_queue.pop_front().unwrap();
+                deal1(hand, deck);
+            }
+        }
+        Decision::Hold => {
+            if *player_type == PlayerType::Dealer {
+                cmd.add_component(*entity, AI {});
+            }
+        }
     }
 }
 
@@ -209,6 +221,31 @@ fn score(player: &mut Player, hand: &Hand, world: &SubWorld) {
         .max()
         .unwrap_or_else(|| possible_scores.iter().min().expect("A score must exist"));
     player.score = *score;
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct AI {}
+
+#[system(for_each)]
+#[write_component(Face)]
+fn ai(
+    _: &AI,
+    player: &mut Player,
+    player_type: &PlayerType,
+    hand: &mut Hand,
+    world: &mut SubWorld,
+    #[resource] deck: &mut Deck,
+) {
+    for entity in &hand.0 {
+        let mut face = world.entry_mut(*entity).unwrap();
+        let face = face.get_component_mut::<Face>().unwrap();
+        *face = Face::Up;
+    }
+    let decision = if player.score < 16 {
+        deal1(hand, deck);
+    } else {
+        println!("DEALER HOLDS");
+    };
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -288,6 +325,7 @@ fn main() {
         .add_system(action_system())
         .add_system(score_system())
         .add_system(display_cards_system())
+        .add_system(ai_system())
         .build();
 
     let mut resources = Resources::default();
@@ -297,15 +335,18 @@ fn main() {
     resources.insert(decision_queue.clone());
 
     schedule.execute(&mut world, &mut resources);
+    let mut ask_player = true;
     loop {
         gameplay_loop.execute(&mut world, &mut resources);
-        let decision = player_decision();
-        if let Decision::Hold = decision {
-            break;
+        if ask_player {
+            let decision = player_decision();
+            decision_queue
+                .lock()
+                .expect("lock failed")
+                .push_back(decision);
+            if decision == Decision::Hold {
+                ask_player = false;
+            }
         }
-        decision_queue
-            .lock()
-            .expect("lock failed")
-            .push_back(decision);
     }
 }
