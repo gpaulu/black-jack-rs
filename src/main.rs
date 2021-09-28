@@ -35,13 +35,6 @@ enum Face {
     Down,
 }
 
-// #[derive(Clone, Copy, Debug, PartialEq)]
-// enum Position {
-//     Deck,
-//     Discard,
-//     Hand(u8),
-// }
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum PlayerType {
     Player,
@@ -79,31 +72,12 @@ fn gen_deck_of_cards() -> Vec<Card> {
     deck
 }
 
-// fn deal(world: &mut World, deck: &mut Vec<Entity>, to: Entity) {
-//     let player = world
-//         .entry_mut(to)
-//         .expect("Player Exists")
-//         .get_component_mut::<Player>()
-//         .expect("Player has Player component");
-
-//     if deck.is_empty() {
-//         todo!()
-//     }
-//     let card = deck.pop().expect("deck is not empty");
-//     let card = world
-//         .entry_mut(card)
-//         .expect("Card exists")
-//         .get_component_mut::<(Position,)>()
-//         .expect("Card has Position");
-// }
-
 #[derive(Clone, Debug, PartialEq, Default)]
 struct Deck(Vec<Entity>);
 
 #[system(for_each)]
 #[filter(component::<Suit>())]
 fn put_in_deck(entity: &Entity, #[resource] deck: &mut Deck) {
-    // *pos = Position::Deck;
     deck.0.push(*entity);
 }
 
@@ -122,14 +96,6 @@ fn pop_deck(deck: &mut Deck) -> Entity {
 fn deal1(hand: &mut Hand, deck: &mut Deck) {
     let card = pop_deck(deck);
     hand.0.push(card);
-    // let mut card = world.entry_mut(card).expect("Card exists");
-    // println!("card has {:?}", card.archetype().layout().component_types());
-    // let position = card
-    //     .get_component_mut::<Position>()
-    //     .expect("Card has Position");
-    // *position = Position::Hand(player.id);
-    // let position = card.get_component::<Position>().expect("Card has Position");
-    // println!("Position is {:?}", position);
 }
 
 #[system(for_each)]
@@ -210,7 +176,6 @@ fn action(
 #[read_component(Suit)]
 #[read_component(Value)]
 fn score(player: &mut Player, hand: &Hand, world: &SubWorld) {
-    // let aces = hand.iter().filter(|entity| if let )
     let card_values = hand.0.iter().map(|entity| {
         let card = world.entry_ref(*entity).expect("Card exists");
         card.into_component::<Value>().expect("Card has Value")
@@ -343,11 +308,4 @@ fn main() {
             .expect("lock failed")
             .push_back(decision);
     }
-
-    // let mut query = <(&Suit, &Value, &Position)>::query();
-
-    // // you can then iterate through the components found in the world
-    // for position in query.iter(&world) {
-    //     println!("{:?}", position);
-    // }
 }
